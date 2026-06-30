@@ -1,0 +1,79 @@
+REM WiFi probe request sniffing with button control and LED status indicators.
+REM Passive capture only; use where you have permission to monitor WiFi traffic.
+REM Dim amber: waiting for operator input.
+LED 35 100 100 50
+DISPLAY_CLEAR
+DISPLAY_TEXT 0 0 Press button to start
+WAIT_FOR_BUTTON_PRESS
+WEB_OFF
+REM Enable Marauder packet/PCAP output so probe requests are written as probe_N.pcap.
+LED 35 100 100 180
+DISPLAY_CLEAR
+DISPLAY_TEXT 0 0 Enabling PCAP output
+ESP32M settings -s SavePCAP enable
+DELAY 500
+REM Stop any existing Marauder scan before starting the probe sniffer.
+LED 0 100 100 100
+DISPLAY_TEXT 0 10 Clearing old scan
+ESP32M stopscan
+DELAY 500
+REM Start the Marauder probe request sniffer.
+LED 200 100 100 180
+DISPLAY_CLEAR
+DISPLAY_TEXT 0 0 Sniffing probes
+DISPLAY_TEXT 0 10 PCAP: probe_N.pcap
+DISPLAY_TEXT 0 30 Press button to stop
+REM https://github.com/justcallmekoko/ESP32Marauder/wiki/probe-request-sniff
+ESP32M sniffprobe
+DELAY 500
+VAR $SCREEN_X_POS = 0
+VAR $LED_HEARTBEAT = 0
+VAR $STOP_CAPTURE = 0
+WHILE ($STOP_CAPTURE == 0)
+    REM The following prints a status dot for every packet received.
+    IF (ESP32M_GET_RECV_PACKETS() != 0)
+        REM Bright green pulse: probe request activity observed.
+        LED 100 100 100 255
+        DISPLAY_TEXT $SCREEN_X_POS 50 .
+        $SCREEN_X_POS = ( $SCREEN_X_POS + 1 )
+        IF ($SCREEN_X_POS >= #_DISPLAY_WIDTH_)
+            DISPLAY_CLEAR
+            DISPLAY_TEXT 0 0 Sniffing probes
+            DISPLAY_TEXT 0 10 PCAP: probe_N.pcap
+            DISPLAY_TEXT 0 30 Press button to stop
+            $SCREEN_X_POS = 0
+        END_IF
+        DELAY 100
+        LED 200 100 100 180
+        $LED_HEARTBEAT = 0
+    ELSE
+        IF ($LED_HEARTBEAT == 0)
+            REM Dim violet: probe sniffer is running.
+            LED 200 100 100 50
+            $LED_HEARTBEAT = 1
+        ELSE
+            REM Bright violet: probe sniffer heartbeat.
+            LED 200 100 100 180
+            $LED_HEARTBEAT = 0
+        END_IF
+    END_IF
+    WAIT_FOR_BUTTON_PRESS_OR_TIMEOUT 900
+    IF (BUTTON_SHORT_PRESS())
+        $STOP_CAPTURE = 1
+    ELSE IF (BUTTON_LONG_PRESS())
+        $STOP_CAPTURE = 1
+    END_IF
+END_WHILE
+DISPLAY_CLEAR
+REM Red: stopping ESP32Marauder probe sniffing.
+LED 0 100 100 180
+ESP32M stopscan
+DELAY 1000
+REM Steady dim green: capture complete, waiting for reset.
+LED 100 100 100 80
+DISPLAY_TEXT 0 0 Probe sniff complete
+DISPLAY_TEXT 0 10 PCAP: probe_N.pcap
+DISPLAY_TEXT 0 20 Press again to reset
+WAIT_FOR_BUTTON_PRESS
+LED_OFF
+RESET
